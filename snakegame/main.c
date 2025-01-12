@@ -14,5 +14,6 @@
 #include <ncurses.h>
 int main(int argc, const char * argv[]) {
     printf("Hello, World!\n");
+    printf("o");
     return 0;
 }
