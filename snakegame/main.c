@@ -21,6 +21,9 @@
  *  This function draws a border around the play area using the # character.
  *  It uses mvprintw() to place characters at specific coordinates.
  *
+ *  check_collision:
+ *  Function to detect if the snake crosses over its body. If it does, the game ends.
+ *
  *  main:
  *  Initializes the snake's body positions and the ncurses environment.
  *  Runs the game loop, which handles input, updates the snake's position, and redraws the screen.
@@ -29,6 +32,7 @@
  
 #include <ncurses.h>   // Include the ncurses library for terminal handling
 #include <unistd.h>    // Include for usleep() to introduce delays
+#include <stdbool.h>   // Include for boolean type
 
 // Define directions using an enum for better readability
 typedef enum {
@@ -39,7 +43,7 @@ typedef enum {
 } Direction;
 
 // Define the snake length as a macro (change this value to set the snake length)
-#define SNAKE_LENGTH 10
+#define SNAKE_LENGTH 5
 
 // Define a structure to represent the snake
 typedef struct {
@@ -59,7 +63,6 @@ typedef struct {
  * Returns:
  *   - The new direction based on user input, or the current direction if no valid key is pressed.
  */
-
 Direction get_new_direction(Direction current_direction) {
     int ch = getch(); // Get a character from the keyboard input (non-blocking due to nodelay)
     switch (ch) {     // Check which key was pressed
@@ -110,6 +113,27 @@ void update_snake(Snake *snake, Direction direction) {
 }
 
 /**
+ * Function: check_collision
+ * -------------------------
+ * Checks if the snake's head collides with its body.
+ *
+ * Parameters:
+ *   - snake: A pointer to the Snake structure representing the snake.
+ *
+ * Returns:
+ *   - true if the head collides with the body, false otherwise.
+ */
+bool check_collision(Snake *snake) {
+    // Check if the head's position matches any of the body segments' positions
+    for (int i = 1; i < snake->length; i++) {
+        if (snake->x[0] == snake->x[i] && snake->y[0] == snake->y[i]) {
+            return true; // Collision detected
+        }
+    }
+    return false; // No collision
+}
+
+/**
  * Function: draw_border
  * ---------------------
  * Draws a border around the play area using the '#' character.
@@ -138,7 +162,7 @@ void draw_border(int max_x, int max_y) {
  */
 int main(void) {
     Snake snake; // Declare a Snake structure to represent the snake
-    Direction current_direction = DIR_RIGHT; // Initialize the snake's direction to right
+    Direction current_direction = DIR_LEFT; // Initialize the snake's direction to right
 
     // Initialize the snake's body positions
     for (int i = 0; i < SNAKE_LENGTH; i++) {
@@ -160,7 +184,8 @@ int main(void) {
     getmaxyx(stdscr, max_y, max_x); // Store the width in max_x and the height in max_y
 
     // Main game loop
-    while (1) {
+    bool game_over = false; // Flag to track if the game is over
+    while (!game_over) {
         // Check for user input (exit on 'q')
         int ch = getch(); // Get a character from the keyboard input
         if (ch == 'q') {
@@ -187,6 +212,12 @@ int main(void) {
             snake.y[0] = 1; // Wrap to the top
         }
 
+        // Check for collision with the snake's body
+        if (check_collision(&snake)) {
+            game_over = true; // End the game if the snake collides with itself
+            break;
+        }
+
         // Draw the snake
         for (int i = 0; i < snake.length; i++) {
             mvprintw(snake.y[i], snake.x[i], "O"); // Draw each segment of the snake
@@ -199,10 +230,17 @@ int main(void) {
         refresh();
 
         // Slow down the movement
-        usleep(100000); // Delay of 100ms between loops to set snake speed
+        usleep(200000); // Introduce a delay of 200ms (200,000 microseconds)
 
         // Handle user input and update direction
         current_direction = get_new_direction(current_direction);
+    }
+
+    // Display game over message
+    if (game_over) {
+        mvprintw(max_y / 2, (max_x - 10) / 2, "GAME OVER!"); // Center the message
+        refresh(); // Refresh the screen to display the message
+        usleep(2000000); // Wait for 2 seconds before exiting
     }
 
     // Clean up and exit
