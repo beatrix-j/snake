@@ -27,12 +27,25 @@
  *  main:
  *  Initializes the snake's body positions and the ncurses environment.
  *  Runs the game loop, which handles input, updates the snake's position, and redraws the screen.
+ *  The game loop checks if it's time to extend the snake and calls extend_snake() if necessary.
  *  Cleans up resources and exits when the user presses 'q'.
  */
  
+//Timer Mechanism:
+//The last_extend_time variable tracks the last time the snake was extended.
+//The time() function is used to check if the specified interval (EXTEND_INTERVAL) has passed.
+//
+//Snake Extension:
+//The extend_snake() function adds a new segment at the tail of the snake and increases its length.
+//The Snake structure uses dynamic arrays (int *x and int *y) to store the snake's body segments.
+//The extend_snake() function uses realloc() to increase the size of these arrays when the snake grows.
+//
+
 #include <ncurses.h>   // Include the ncurses library for terminal handling
 #include <unistd.h>    // Include for usleep() to introduce delays
 #include <stdbool.h>   // Include for boolean type
+#include <stdlib.h>    // Include for dynamic memory allocation
+#include <time.h>      // Include for time() function
 
 // Define directions using an enum for better readability
 typedef enum {
@@ -42,14 +55,17 @@ typedef enum {
     DIR_RIGHT  // Represents the rightward direction
 } Direction;
 
-// Define the snake length as a macro (change this value to set the snake length)
-#define SNAKE_LENGTH 5
+// Define the initial snake length
+#define INITIAL_SNAKE_LENGTH 5
+
+// Define the interval (in seconds) for extending the snake
+#define EXTEND_INTERVAL 5
 
 // Define a structure to represent the snake
 typedef struct {
-    int x[SNAKE_LENGTH]; // Array to store the X coordinates of the snake's body segments
-    int y[SNAKE_LENGTH]; // Array to store the Y coordinates of the snake's body segments
-    int length;          // Current length of the snake
+    int *x;    // Dynamic array to store the X coordinates of the snake's body segments
+    int *y;    // Dynamic array to store the Y coordinates of the snake's body segments
+    int length; // Current length of the snake
 } Snake;
 
 /**
@@ -134,6 +150,27 @@ bool check_collision(Snake *snake) {
 }
 
 /**
+ * Function: extend_snake
+ * ----------------------
+ * Extends the snake by 1 character by adding a new segment at the tail.
+ *
+ * Parameters:
+ *   - snake: A pointer to the Snake structure representing the snake.
+ */
+void extend_snake(Snake *snake) {
+    // Reallocate memory for the snake's body segments
+    snake->x = realloc(snake->x, (snake->length + 1) * sizeof(int));
+    snake->y = realloc(snake->y, (snake->length + 1) * sizeof(int));
+
+    // Add a new segment at the tail position
+    snake->x[snake->length] = snake->x[snake->length - 1];
+    snake->y[snake->length] = snake->y[snake->length - 1];
+
+    // Increase the snake's length
+    snake->length++;
+}
+
+/**
  * Function: draw_border
  * ---------------------
  * Draws a border around the play area using the '#' character.
@@ -156,20 +193,30 @@ void draw_border(int max_x, int max_y) {
 }
 
 /**
+ * Function: show_splash_screen
+ * ----------------------------
+ * Displays a splash screen with the text "Snake Game!" for 2 seconds.
+ *
+ * Parameters:
+ *   - max_x: The maximum X coordinate of the terminal (width).
+ *   - max_y: The maximum Y coordinate of the terminal (height).
+ */
+void show_splash_screen(int max_x, int max_y) {
+    clear(); // Clear the screen
+    mvprintw(max_y / 3, (max_x - 11 ) / 2, "Snake Game!"); // Center the splash screen text
+    refresh(); // Refresh the screen to display the text
+    sleep(2);  // Display the splash screen for 2 seconds
+    clear(); // Clear the screen
+}
+
+/**
  * Function: main
  * --------------
  * The entry point of the program. Initializes the game, handles the game loop, and cleans up resources.
  */
 int main(void) {
     Snake snake; // Declare a Snake structure to represent the snake
-    Direction current_direction = DIR_LEFT; // Initialize the snake's direction to right
-
-    // Initialize the snake's body positions
-    for (int i = 0; i < SNAKE_LENGTH; i++) {
-        snake.x[i] = 5 + i; // Set the X positions in a horizontal line
-        snake.y[i] = 5;     // Set the Y positions to the same row
-    }
-    snake.length = SNAKE_LENGTH; // Set the snake's length
+    Direction current_direction = DIR_LEFT; // Initialize the snake's direction to left
 
     // Initialize ncurses
     initscr();             // Start curses mode (initialize the screen)
@@ -183,8 +230,21 @@ int main(void) {
     int max_x, max_y;
     getmaxyx(stdscr, max_y, max_x); // Store the width in max_x and the height in max_y
 
+    // Show the splash screen
+    show_splash_screen(max_x, max_y);
+
+    // Initialize the snake's body positions
+    snake.length = INITIAL_SNAKE_LENGTH;
+    snake.x = malloc(snake.length * sizeof(int));
+    snake.y = malloc(snake.length * sizeof(int));
+    for (int i = 0; i < snake.length; i++) {
+        snake.x[i] = (max_x / 2) + i; // Set the X positions in a horizontal line (starting from the middle)
+        snake.y[i] = max_y / 2;       // Set the Y positions to the middle row
+    }
+
     // Main game loop
     bool game_over = false; // Flag to track if the game is over
+    time_t last_extend_time = time(NULL); // Track the last time the snake was extended
     while (!game_over) {
         // Check for user input (exit on 'q')
         int ch = getch(); // Get a character from the keyboard input
@@ -229,8 +289,15 @@ int main(void) {
         // Refresh the screen to display changes
         refresh();
 
+        // Check if it's time to extend the snake
+        time_t current_time = time(NULL);
+        if (current_time - last_extend_time >= EXTEND_INTERVAL) {
+            extend_snake(&snake); // Extend the snake by 1 character
+            last_extend_time = current_time; // Update the last extend time
+        }
+
         // Slow down the movement
-        usleep(200000); // Introduce a delay of 200ms (200,000 microseconds)
+        usleep(100000); // Introduce a delay of 100ms (100,000 microseconds)
 
         // Handle user input and update direction
         current_direction = get_new_direction(current_direction);
@@ -244,8 +311,8 @@ int main(void) {
     }
 
     // Clean up and exit
+    free(snake.x); // Free the dynamically allocated memory for the snake's X coordinates
+    free(snake.y); // Free the dynamically allocated memory for the snake's Y coordinates
     endwin(); // End curses mode and restore the terminal
     return 0; // Return 0 to indicate successful execution
 }
-
-
